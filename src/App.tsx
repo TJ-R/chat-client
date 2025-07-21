@@ -5,23 +5,35 @@ import './App.css'
 
 function App() {
     // const messageLog = document.getElementById("log-container")
-    const ws = new WebSocket("ws://localhost:8080")
+    const ws = useRef(null);
     const [chatInput, setChatInput] = useState('')
 
-    ws.addEventListener('close', ev => {
-        appendChat("WebSocket Disconnected", true);
-    })
+    let pingInterval;
 
-    ws.addEventListener('open', ev => {
-        console.log("Opened Websocket")
-        ws.send(JSON.stringify("Hello from client"))
-        appendChat("Connect to Websocket...");
-    })
+    useEffect(() => {
+        ws.current = new WebSocket("ws://localhost:8080")
+        ws.current.addEventListener('close', ev => {
+            stopPinging()
+            appendChat("WebSocket Disconnected", true);
+        })
 
-    ws.addEventListener('message', ev => {
-        appendChat(ev.data)
-    })
+        ws.current.addEventListener('open', ev => {
+            console.log("Opened Websocket")
+            ws.current.send("Hello from client")
+            startPinging()
+            // appendChat("Connect to Websocket...");
+        })
 
+        ws.current.addEventListener('message', ev => {
+            appendChat(ev.data)
+        })
+
+        return () => {
+            if (ws.current.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+        };
+    }, []);
 
     class State {
         messages: Array<Message>
@@ -32,32 +44,25 @@ function App() {
         error: boolean;
     }
 
+    function startPinging() {
+        pingInterval = setInterval(() => {
+            ws.current.send("Client is still alive")
+            console.log("Sent Ping To WebSocket")
+        }, 30000)
+    }
+
+    function stopPinging() {
+        clearInterval(pingInterval)
+    }
+
     const state: State = { messages: []};
 
-    async function handleSubmit(event) {
+    function handleSubmit(event) {
         if (chatInput == "") {
             return
         }
 
-        try {
-            // const resp = await fetch('/', {
-            //     method: 'POST',
-            //     body: msg,
-            // })
-            
-            const resp = ws.send(JSON.stringify(chatInput))
-            console.log(resp)
-
-            if (resp != null) {
-                appendChat(chatInput, false)
-            }
-
-            if (resp.status !== 202) {
-                throw new Error(`Unexpected HTTP Status ${resp.status} ${resp.statusText}`)
-            }
-        } catch (err) {
-            appendChat(`Submit Failed: ${err.message}`, true)
-        }
+        ws.current.send(chatInput)
     }
 
     function appendChat(text, error) {
@@ -66,6 +71,7 @@ function App() {
                 message: `${new Date().toLocaleTimeString()}: ${text}`,
                 error: true
             }
+
             state.messages.push(message)
             return
         } 
@@ -74,10 +80,12 @@ function App() {
             message: `${new Date().toLocaleTimeString()}: ${text}`,
             error: false
         }
+        // state.messages.push(message)
+        // console.log(state)
         return 
     }
 
-    const handleChatInputChange = (ev) =>  {
+    const handleChatInputChange = (ev) => {
         setChatInput(event.target.value);
     };
 
