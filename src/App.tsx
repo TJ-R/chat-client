@@ -1,10 +1,25 @@
 import { useState, useEffect, useRef } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
 import './App.css'
+
+class State {
+     messages: Array<Message>
+}
+
+class Message {
+    message: string;
+    error: boolean;
+}
+
+class ChatMessage {
+    message: string;
+    recieved: string;
+    error: boolean;
+}
 
 function App() {
     // const messageLog = document.getElementById("log-container")
+    
+    const [chatState, setChatState] = useState<ChatMessage[]>([])
     const ws = useRef(null);
     const [chatInput, setChatInput] = useState('')
 
@@ -12,20 +27,27 @@ function App() {
 
     useEffect(() => {
         ws.current = new WebSocket("ws://localhost:8080")
-        ws.current.addEventListener('close', ev => {
+        ws?.current.addEventListener('close', ev => {
             stopPinging()
-            appendChat("WebSocket Disconnected", true);
+            addMessage("WebSocket Disconnected", true);
         })
 
-        ws.current.addEventListener('open', ev => {
+        ws?.current.addEventListener('open', ev => {
             console.log("Opened Websocket")
-            ws.current.send("Hello from client")
+
+            const msg: Message = {
+                message: "Hello from client",
+                error: false
+            }
+
+            ws.current.send(JSON.stringify(msg))
             startPinging()
-            // appendChat("Connect to Websocket...");
+            addMessage("Connect to Websocket...")
         })
 
-        ws.current.addEventListener('message', ev => {
-            appendChat(ev.data)
+        ws?.current.addEventListener('message', ev => {
+            console.log("Recieved: " + ev.data)
+            // addRecievedMessage(ev.data)
         })
 
         return () => {
@@ -35,18 +57,16 @@ function App() {
         };
     }, []);
 
-    class State {
-        messages: Array<Message>
-    }
-
-    class Message {
-        message: string;
-        error: boolean;
-    }
+    
 
     function startPinging() {
+
+        const msg: Messsage = {
+            message: "Client is still alive",
+            error: false
+        }
         pingInterval = setInterval(() => {
-            ws.current.send("Client is still alive")
+            ws.current.send(JSON.stringify(msg))
             console.log("Sent Ping To WebSocket")
         }, 30000)
     }
@@ -55,35 +75,47 @@ function App() {
         clearInterval(pingInterval)
     }
 
-    const state: State = { messages: []};
 
     function handleSubmit(event) {
-        if (chatInput == "") {
-            return
-        }
-
-        ws.current.send(chatInput)
+        console.log("Chat Input " + chatInput)
     }
 
-    function appendChat(text, error) {
-        if (error) {
-            let message: Message = {
-                message: `${new Date().toLocaleTimeString()}: ${text}`,
-                error: true
-            }
-
-            state.messages.push(message)
-            return
-        } 
-
-        let message: Message = {
-            message: `${new Date().toLocaleTimeString()}: ${text}`,
+    const addMessage = () => {
+        console.log("Adding Message")
+        const msg: Message = {
+            message: chatInput,
             error: false
         }
-        // state.messages.push(message)
-        // console.log(state)
-        return 
+
+        if (chatInput == "") {
+            console.log("Message was empty")
+            return
+        }
+
+        ws.current.send(JSON.stringify(msg))
+
+        const newMessage: ChatMessage = { 
+            message: chatInput,
+            recieved: false,
+            error: false
+        }
+
+        setChatState([...chatState, newMessage])
+        setChatInput("")
+        console.log("After message" + chatState)
     }
+
+    // Seems to create a race condition for displaying
+    const addRecievedMessage = (msg: string) => {
+        const newMsg: Message = {
+            message: msg,
+            recieved: true,
+            error: false
+        }
+
+        setChatState([...chatState, newMsg])
+    }
+
 
     const handleChatInputChange = (ev) => {
         setChatInput(event.target.value);
@@ -93,24 +125,20 @@ function App() {
     <>
         <div className="chatbox-container">
             <div className="log-container">
-                {
-                    state.messages.map((message) => {
-                        () => {
-                            if (message.error) {
-                                <p class="error">{message.message}</p>
-                            } else {
-                                <p>{message.message}</p>
-                            }
-                        }
-                    })
-                }
+                {chatState.map(message => {
+                    if (message.recieved) {
+                        return <p>Recieved: {message.message}</p>
+                    } else {
+                        return <p>{message.message}</p>
+                    }
+                })}
             </div> 
             <form id="message-form" action={handleSubmit}>
                 <label>
                     Message:
                     <input id="chat-input" type="text" value={chatInput} onChange={handleChatInputChange} />
                 </label>
-                <input type="submit" value="Submit" />
+                <button onClick={addMessage}>Send Message</button>
             </form>
         </div>
     </>
